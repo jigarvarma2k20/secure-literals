@@ -1,0 +1,21 @@
+targets:
+  $default:
+    builders:
+      secure_literals:
+        enabled: true
+      # Auto-watch the yaml file to trigger builds
+    sources:
+      include:
+        - lib/**
+        - web/**
+        - test/**
+        - secure_literals.yaml
+        - pubspec.yaml
+
+builders:
+  secure_literals:
+    import: "package:secure_literals/src/secure_literals_builder.dart"
+    builder_factories: ["secureLiteralsBuilder"]
+    build_extensions: { "secure_literals.yaml": ["lib/generated_literals.dart"] }
+    auto_apply: root_package
+    build_to: source

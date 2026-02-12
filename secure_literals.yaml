@@ -1,0 +1,12 @@
+literals:
+  apiKey: "SUPER_SECRET_KEY_12345"
+  apiSecret: "ANOTHER_SECRET_VALUE"
+  maxRetries: 5
+  timeoutMs: 30000
+  serverEndpoints:
+    - "https://api.one.com"
+    - "https://api.two.com"
+  retryDelays:
+    - 1000
+    - 2000
+    - 5000
