@@ -107,28 +107,73 @@ generateSecureLiterals(String yamlContent) async {
       ])),
     );
 
-    for (final entry in encryptedMap.entries) {
-      final name = entry.key;
-      final encrypted = entry.value;
+    for (final entry in literals.entries) {
+      final name = entry.key.toString();
+      final value = entry.value;
+      final encrypted = encryptedMap[name]!;
+
+      Reference returnType;
+      Code extraction;
+
+      if (value is String) {
+        returnType = Reference('String');
+        extraction = Code('_$name ??= _decrypt(\'$encrypted\')');
+      }
+      else if (value is int) {
+        returnType = Reference('int');
+        extraction = Code(
+          '_$name ??= int.parse(_decrypt(\'$encrypted\'))'
+        );
+      }
+      else if (value is double) {
+        returnType = Reference('double');
+        extraction = Code(
+          '_$name ??= double.parse(_decrypt(\'$encrypted\'))'
+        );
+      }
+      else if (value is List) {
+        final list = value.toList();
+
+        if (list.isNotEmpty && list.first is int) {
+          returnType = Reference('List<int>');
+          extraction = Code(
+            '_$name ??= (jsonDecode(_decrypt(\'$encrypted\')) as List).cast<int>()'
+          );
+        } else {
+          returnType = Reference('List<String>');
+          extraction = Code(
+            '_$name ??= (jsonDecode(_decrypt(\'$encrypted\')) as List).cast<String>()'
+          );
+        }
+      }
+      else if (value is Map) {
+        returnType = Reference('Map<String, dynamic>');
+        extraction = Code(
+          '_$name ??= jsonDecode(_decrypt(\'$encrypted\')) as Map<String, dynamic>'
+        );
+      }
+      else {
+        continue;
+      }
 
       c.fields.add(
         Field((f) => f
         ..name = '_$name'
         ..static = true
-        ..type = Reference('dynamic')),
+        ..type = Reference('${returnType.symbol}?')),
       );
 
       c.methods.add(
         Method((m) => m
         ..name = name
         ..static = true
-        ..returns = Reference('dynamic')
+        ..returns = returnType
         ..type = MethodType.getter
         ..lambda = true
-        ..body = Code(
-          '_$name ??= jsonDecode(_decrypt(\'$encrypted\'))')),
+        ..body = extraction),
       );
     }
+
   });
 
   final library = Library((l) => l

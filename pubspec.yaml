@@ -1,6 +1,6 @@
 name: secure_literals
 description: "Encrypts sensitive data before storing in flutter projects"
-version: 0.0.4
+version: 0.0.5
 homepage: https://github.com/Jigarvarma2k20/secure-literals
 repository: https://github.com/Jigarvarma2k20/secure-literals
 

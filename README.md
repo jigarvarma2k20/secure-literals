@@ -2,39 +2,52 @@
 
 Secure Literals is a Dart package that enhances the security of your Flutter and Dart applications by encrypting sensitive literals at generation time.
 
-It prevents plain-text strings, integers, and lists from being exposed in your compiled binary, decrypting them only when needed at runtime.
+It prevents plain-text strings, integers, lists, and maps from being exposed in your compiled binary, decrypting them only when needed at runtime.
 
 Secure Literals uses a simple CLI generator and does not rely on build_runner.
 
+---
 
 ## Features
 
 - Generation-time encryption using AES-256-GCM with a unique IV per value
+- Authenticated encryption (tamper detection)
 - Lazy runtime decryption with in-memory caching
 - YAML-based configuration
 - Configurable output file path
 - Customizable generated class name
+- Strongly typed getters (String, int, List, Map)
 - No build_runner dependency
 
 ---
 
 ## Installation
 
-Add the packages:
+Add Secure Literals as a development dependency:
+
 ```bash
-flutter pub add encrypt
 flutter pub add --dev secure_literals
 ```
+
+No additional encryption package is required.
+
 ---
 
 ## Usage
 
 ### 1. Create Configuration File
 
-Create a file named secure_literals.yaml in your project root.
+Create a file named:
+
+```
+secure_literals.yaml
+```
+
+in your project root.
 
 Example:
-```
+
+```yaml
 output: lib/secure/generated_keys.dart
 class_name: AppSecrets
 
@@ -50,51 +63,64 @@ literals:
     - 1000
     - 2000
     - 5000
+  headers:
+    X-Request-ID: "request-id"
+    X-App-Version: "1.0.0"
 ```
 
-YAML Options
+---
 
-- output (optional)  
-  Default: lib/generated_literals.dart  
-  Description: Output file path
+### YAML Options
 
-- class_name (optional)  
-  Default: SecureLiterals  
-  Description: Generated class name
+| Key         | Required | Default                          | Description |
+|------------|----------|----------------------------------|-------------|
+| output     | No       | `lib/generated_literals.dart`    | Output file path |
+| class_name | No       | `SecureLiterals`                 | Generated class name |
+| literals   | Yes      | —                                | Map of values to encrypt |
 
-- literals (required)  
-  Description: Map of values to encrypt
+---
 
-Supported Types:
-- String
-- int
-- List<String>
-- List<int>
+### Supported Types
+
+- `String`
+- `int`
+- `double`
+- `List<String>`
+- `List<int>`
+- `Map<String, dynamic>`
 
 ---
 
 ### 2. Generate Code
 
 From your project root:
-```
+
+```bash
 dart run secure_literals
 ```
+
 Example output:
+
 ```
 Generated lib/secure/generated_keys.dart
 ```
+
 ---
 
 ### 3. Use the Generated Secrets
-```
-// Import the generated file:
+
+Import the generated file:
+
+```dart
 import 'package:your_app/secure/generated_keys.dart';
 
 void main() {
   print(AppSecrets.apiKey);
   print(AppSecrets.serverEndpoints);
+  print(AppSecrets.headers['X-Request-ID']);
 }
 ```
+
 Secrets are decrypted only on first access and cached afterward.
 
 ---
@@ -102,9 +128,11 @@ Secrets are decrypted only on first access and cached afterward.
 ## How It Works
 
 1. YAML values are encrypted using AES-256-GCM.
-2. The encryption key is embedded in the generated file.
-3. Each value uses a unique IV.
-4. Values are lazily decrypted at runtime.
+2. A 256-bit encryption key is generated during code generation.
+3. Each literal uses a unique 12-byte IV.
+4. The IV and authentication tag are embedded alongside ciphertext.
+5. Values are lazily decrypted at runtime.
+6. If ciphertext is modified, decryption fails.
 
 ---
 
@@ -116,17 +144,21 @@ This package significantly raises the difficulty of extracting secrets via:
 - Basic APK/IPA decompilation
 - Static scanning
 
-However, the encryption key is bundled inside the client application.
+AES-GCM provides authenticated encryption, meaning tampered values will cause decryption failure.
 
-This protects against casual inspection but not against a determined reverse engineer.
+However, the encryption key is embedded inside the client application.
+
+This protects against casual inspection but not against a determined reverse engineer with full control over the binary.
+
+Do not store highly sensitive backend secrets in client applications.
 
 ---
 
 ## Recommended Best Practices
 
-- Add secure_literals.yaml to .gitignore
-- Optionally add the generated file to .gitignore
-- Avoid storing highly sensitive backend secrets in client applications
+- Add `secure_literals.yaml` to `.gitignore`
+- Optionally add the generated file to `.gitignore`
+- Regenerate secrets before release builds
 - Use server-side validation whenever possible
 
 ---
