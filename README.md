@@ -9,7 +9,7 @@ Secure Literals uses a simple CLI generator and does not rely on build_runner.
 
 ## Features
 
-- Generation-time encryption using AES-256-CTR with a unique IV per value
+- Generation-time encryption using AES-256-GCM with a unique IV per value
 - Lazy runtime decryption with in-memory caching
 - YAML-based configuration
 - Configurable output file path
@@ -101,7 +101,7 @@ Secrets are decrypted only on first access and cached afterward.
 
 ## How It Works
 
-1. YAML values are encrypted using AES-256-CTR.
+1. YAML values are encrypted using AES-256-GCM.
 2. The encryption key is embedded in the generated file.
 3. Each value uses a unique IV.
 4. Values are lazily decrypted at runtime.

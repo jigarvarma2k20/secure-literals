@@ -1,9 +1,10 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:code_builder/code_builder.dart';
 import 'package:dart_style/dart_style.dart';
-import 'package:encrypt/encrypt.dart';
+import 'package:pointycastle/export.dart';
 import 'package:yaml/yaml.dart';
 
 Future<(String outputPath, String generatedCode)>
@@ -25,14 +26,46 @@ generateSecureLiterals(String yamlContent) async {
   final className =
   yaml['class_name']?.toString() ?? 'SecureLiterals';
 
-  final key = Key.fromSecureRandom(32);
-  final encrypter = Encrypter(AES(key, mode: AESMode.sic));
+  final secureRandom = Random.secure();
 
-  String encryptWithIv(String plainText) {
-    final iv = IV.fromSecureRandom(16);
-    final encrypted = encrypter.encrypt(plainText, iv: iv);
-    final combined = [...iv.bytes, ...encrypted.bytes];
+  Uint8List randomBytes(int length) {
+    return Uint8List.fromList(
+      List.generate(length, (_) => secureRandom.nextInt(256)),
+    );
+  }
+
+  final keyBytes = randomBytes(32); // 256-bit key
+
+  String encrypt(String plainText) {
+    final iv = randomBytes(12); // GCM recommended IV size
+
+    final cipher = GCMBlockCipher(AESEngine())
+    ..init(
+      true,
+      AEADParameters(
+        KeyParameter(keyBytes),
+        128, // MAC size
+        iv,
+        Uint8List(0),
+      ),
+    );
+
+    final input = Uint8List.fromList(utf8.encode(plainText));
+    final output = cipher.process(input);
+
+    final combined = Uint8List.fromList([
+      ...iv,
+      ...output,
+    ]);
+
     return base64Encode(combined);
+  }
+
+  final encryptedMap = <String, String>{};
+
+  for (final entry in literals.entries) {
+    encryptedMap[entry.key.toString()] =
+    encrypt(jsonEncode(entry.value));
   }
 
   final classBuilder = Class((c) {
@@ -40,10 +73,10 @@ generateSecureLiterals(String yamlContent) async {
 
     c.fields.add(
       Field((f) => f
-      ..name = '_keyBytes'
+      ..name = '_key'
       ..static = true
       ..modifier = FieldModifier.final$
-      ..assignment = Code('[${key.bytes.join(', ')}]')
+      ..assignment = Code('[${keyBytes.join(', ')}]')
       ..type = Reference('List<int>')),
     );
 
@@ -52,77 +85,57 @@ generateSecureLiterals(String yamlContent) async {
       ..name = '_decrypt'
       ..static = true
       ..returns = Reference('String')
-      ..requiredParameters.add(Parameter((p) => p
-      ..name = 'encryptedBase64'
-      ..type = Reference('String')))
+      ..requiredParameters.add(
+        Parameter((p) => p
+        ..name = 'encoded'
+        ..type = Reference('String')),
+      )
       ..body = Block.of([
-        const Code('final key = Key(Uint8List.fromList(_keyBytes));'),
-        const Code('final bytes = base64Decode(encryptedBase64);'),
-        const Code('final iv = IV(bytes.sublist(0, 16));'),
-        const Code('final cipherText = Encrypted(bytes.sublist(16));'),
+        const Code('final bytes = base64Decode(encoded);'),
+        const Code('final iv = bytes.sublist(0, 12);'),
+        const Code('final cipherText = bytes.sublist(12);'),
         const Code(
-          'final encrypter = Encrypter(AES(key, mode: AESMode.sic));'),
-          const Code('return encrypter.decrypt(cipherText, iv: iv);'),
+          'final cipher = GCMBlockCipher(AESEngine())'
+        '..init(false, AEADParameters('
+        'KeyParameter(Uint8List.fromList(_key)),'
+        '128,'
+        'iv,'
+        'Uint8List(0)'
+        '));'),
+        const Code('final output = cipher.process(cipherText);'),
+        const Code('return utf8.decode(output);'),
       ])),
     );
 
-    literals.forEach((dynamic rawKey, dynamic value) {
-      final name = rawKey.toString();
-
-      Reference type;
-      Code extractionCode;
-
-      if (value is String) {
-        final encryptedValue = encryptWithIv(value);
-        type = Reference('String');
-        extractionCode = Code("_decrypt('$encryptedValue')");
-      } else if (value is int) {
-        final encryptedValue = encryptWithIv(value.toString());
-        type = Reference('int');
-        extractionCode =
-        Code("int.parse(_decrypt('$encryptedValue'))");
-      } else if (value is YamlList || value is List) {
-        final list = (value as List).toList();
-        final jsonList = jsonEncode(list);
-        final encryptedValue = encryptWithIv(jsonList);
-
-        if (list.isNotEmpty && list.first is int) {
-          type = Reference('List<int>');
-          extractionCode = Code(
-            "(jsonDecode(_decrypt('$encryptedValue')) as List).cast<int>()");
-        } else {
-          type = Reference('List<String>');
-          extractionCode = Code(
-            "(jsonDecode(_decrypt('$encryptedValue')) as List).cast<String>()");
-        }
-      } else {
-        return;
-      }
+    for (final entry in encryptedMap.entries) {
+      final name = entry.key;
+      final encrypted = entry.value;
 
       c.fields.add(
         Field((f) => f
         ..name = '_$name'
         ..static = true
-        ..type = Reference('${type.symbol}?')),
+        ..type = Reference('dynamic')),
       );
 
       c.methods.add(
         Method((m) => m
         ..name = name
         ..static = true
-        ..returns = type
+        ..returns = Reference('dynamic')
         ..type = MethodType.getter
         ..lambda = true
-        ..body = Code('_$name ??= $extractionCode')),
+        ..body = Code(
+          '_$name ??= jsonDecode(_decrypt(\'$encrypted\'))')),
       );
-    });
+    }
   });
 
   final library = Library((l) => l
   ..directives.addAll([
-    Directive.import('dart:typed_data'),
     Directive.import('dart:convert'),
-    Directive.import('package:encrypt/encrypt.dart'),
+    Directive.import('dart:typed_data'),
+    Directive.import('package:pointycastle/export.dart'),
   ])
   ..body.add(classBuilder));
 
