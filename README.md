@@ -1,76 +1,136 @@
 # Secure Literals
 
-Secure Literals is a Dart package designed to enhance the security of your Flutter and Dart applications by encrypting sensitive literals at build time. It prevents plain-text strings, integers, and lists from being exposed in your compiled binary, decrypting them only when needed at runtime.
+Secure Literals is a Dart package that enhances the security of your Flutter and Dart applications by encrypting sensitive literals at generation time.
 
-[![Pub Version](https://img.shields.io/pub/v/secure_literals)](https://pub.dev/packages/secure_literals)
-[![License](https://img.shields.io/github/license/Jigarvarma2k20/secure-literals)](https://github.com/Jigarvarma2k20/secure-literals/blob/master/LICENSE)
+It prevents plain-text strings, integers, and lists from being exposed in your compiled binary, decrypting them only when needed at runtime.
+
+Secure Literals uses a simple CLI generator and does not rely on build_runner.
+
 
 ## Features
 
-- **Build-time Encryption**: Secrets are encrypted during the build process using AES-256-CTR. We use unique Initialization Vectors (IVs) for every entry to ensure maximum security.
-- **Runtime Decryption**: Values are decrypted on demand and cached in memory, so there is no performance penalty for subsequent accesses.
-- **YAML Configuration**: Manage your secrets easily using a `secure_literals.yaml` file.
-- **Type Safe**: The package generates strictly typed getters for `String`, `int`, `List<String>`, and `List<int>`, ensuring compile-time safety.
+- Generation-time encryption using AES-256-CTR with a unique IV per value
+- Lazy runtime decryption with in-memory caching
+- YAML-based configuration
+- Configurable output file path
+- Customizable generated class name
+- No build_runner dependency
+
+---
 
 ## Installation
 
-Run the following commands to add the package to your project:
-
+Add the packages:
 ```bash
-flutter pub add secure_literals
-flutter pub add --dev build_runner
+flutter pub add encrypt
+flutter pub add --dev secure_literals
 ```
+---
 
 ## Usage
 
-### 1. Configure Secrets
+### 1. Create Configuration File
 
-Create a file named `secure_literals.yaml` in the root of your project. This file will hold your sensitive configuration.
+Create a file named secure_literals.yaml in your project root.
 
-```yaml
-literals:
-  apiKey: "AIzaShdhdereyCX..."
-  apiSecret: "836dd343f3...1a"
-  maxRetries: 3
-  supportedLocales:
-    - "en_US"
-    - "fr_FR"
+Example:
 ```
+output: lib/secure/generated_keys.dart
+class_name: AppSecrets
+
+literals:
+  apiKey: "SUPER_SECRET_KEY_12345"
+  apiSecret: "ANOTHER_SECRET_VALUE"
+  maxRetries: 5
+  timeoutMs: 30000
+  serverEndpoints:
+    - "https://api.one.com"
+    - "https://api.two.com"
+  retryDelays:
+    - 1000
+    - 2000
+    - 5000
+```
+
+YAML Options
+
+- output (optional)  
+  Default: lib/generated_literals.dart  
+  Description: Output file path
+
+- class_name (optional)  
+  Default: SecureLiterals  
+  Description: Generated class name
+
+- literals (required)  
+  Description: Map of values to encrypt
+
+Supported Types:
+- String
+- int
+- List<String>
+- List<int>
+
+---
 
 ### 2. Generate Code
 
-Run the build runner to generate the secure class containing your encrypted data:
-
-```bash
-dart run build_runner build
+From your project root:
 ```
+dart run secure_literals
+```
+Example output:
+```
+Generated lib/secure/generated_keys.dart
+```
+---
 
-This will create a file located at `lib/generated_literals.dart` (by default).
-
-### 3. Access Secrets
-
-Import the generated file and access your secrets through the static properties of the generated class.
-
-```dart
-import 'package:secure_literals/generated_literals.dart';
+### 3. Use the Generated Secrets
+```
+// Import the generated file:
+import 'package:your_app/secure/generated_keys.dart';
 
 void main() {
-  // Secrets are decrypted the first time they are accessed
-  print('API Key: ${AppSecrets.apiKey}');
-  
-  // Lists are automatically parsed and cast to the correct type
-  print('Locales: ${AppSecrets.supportedLocales}');
+  print(AppSecrets.apiKey);
+  print(AppSecrets.serverEndpoints);
 }
 ```
+Secrets are decrypted only on first access and cached afterward.
 
-## Security Note
+---
 
-This package obfuscates your secrets and significantly raises the bar for casual inspection (like running `strings` on the binary). However, it is important to understand that the encryption key is embedded alongside the ciphertext in the client application. Therefore, it cannot protect against a determined attacker who has the resources to reverse-engineer your application code.
+## How It Works
 
-**Best Practices:**
-- Add `secure_literals.yaml` to your `.gitignore` file to prevent committing secrets to version control.
-- Add the generated file (e.g., `lib/generated_literals.dart`) to your `.gitignore` file.
+1. YAML values are encrypted using AES-256-CTR.
+2. The encryption key is embedded in the generated file.
+3. Each value uses a unique IV.
+4. Values are lazily decrypted at runtime.
+
+---
+
+## Security Notice
+
+This package significantly raises the difficulty of extracting secrets via:
+
+- Binary string inspection
+- Basic APK/IPA decompilation
+- Static scanning
+
+However, the encryption key is bundled inside the client application.
+
+This protects against casual inspection but not against a determined reverse engineer.
+
+---
+
+## Recommended Best Practices
+
+- Add secure_literals.yaml to .gitignore
+- Optionally add the generated file to .gitignore
+- Avoid storing highly sensitive backend secrets in client applications
+- Use server-side validation whenever possible
+
+---
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the LICENSE file for details.
