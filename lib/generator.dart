@@ -64,8 +64,15 @@ generateSecureLiterals(String yamlContent) async {
   final encryptedMap = <String, String>{};
 
   for (final entry in literals.entries) {
+
+    final value = entry.value;
+
+    final encodedValue = value is String
+    ? value
+    : jsonEncode(value);
+
     encryptedMap[entry.key.toString()] =
-    encrypt(jsonEncode(entry.value));
+    encrypt(encodedValue);
   }
 
   final classBuilder = Class((c) {
